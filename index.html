@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chiller supplier comparison</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#EEF2F4; --panel:#FFFFFF; --ink:#1B2A33; --muted:#5B6B75; --rule:#C9D3D9; --best:#DDF1E4; --best-ink:#1E6B3A;
+  --warn:#B3261E; --warn-soft:#FBE4E2; --gap:#F4F0E6;
+  --head:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+  --bg:#12191E; --panel:#1A242B; --ink:#E4ECF0; --muted:#98A8B2; --rule:#2E3C45; --best:#1B3A27; --best-ink:#8FD6A6;
+  --warn:#F28B82; --warn-soft:#3B1F1D; --gap:#262A22; } }
+:root[data-theme="dark"]{
+  --bg:#12191E; --panel:#1A242B; --ink:#E4ECF0; --muted:#98A8B2; --rule:#2E3C45; --best:#1B3A27; --best-ink:#8FD6A6;
+  --warn:#F28B82; --warn-soft:#3B1F1D; --gap:#262A22; }
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--body)}
+.wrap{max-width:1240px;margin:0 auto;padding:28px 20px 60px}
+h1,h2,h3{font-family:var(--head);font-weight:600;line-height:1.1;margin:0}
+h1{font-size:clamp(2.2rem,5vw,3.4rem)}
+h2{font-size:1.7rem;margin:34px 0 14px}
+h3{font-size:1.25rem}
+p{margin:0 0 .6em}
+.muted{color:var(--muted)}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+
+header{border-bottom:2px solid var(--ink);padding-bottom:16px;display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:end}
+.src{font-size:.9rem;color:var(--muted);margin-top:6px}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:1px solid var(--ink);background:var(--ink);color:var(--bg);padding:7px 14px;border-radius:4px;cursor:pointer;text-decoration:none;font-size:.9rem;display:inline-block}
+.btn.line{background:transparent;color:var(--ink);border-color:var(--rule)}
+.drop{margin-top:16px;border:2px dashed var(--rule);border-radius:6px;padding:12px 16px;font-size:.9rem;color:var(--muted);text-align:center}
+.drop.on{border-color:var(--ink);color:var(--ink);background:var(--panel)}
+.msg{margin-top:10px;padding:10px 14px;border-radius:4px;font-size:.9rem;display:none}
+.msg.err{display:block;background:var(--warn-soft);color:var(--warn)}
+.msg.ok{display:block;background:var(--best);color:var(--best-ink)}
+
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 0}
+.chip{display:flex;align-items:center;gap:8px;border:1px solid var(--rule);background:var(--panel);border-radius:20px;padding:5px 12px 5px 8px;cursor:pointer;font-size:.9rem;user-select:none}
+.chip input{accent-color:var(--c);width:16px;height:16px;margin:0}
+.chip .sw{width:12px;height:12px;border-radius:50%;background:var(--c)}
+.chip.off{opacity:.5}
+
+.cond{background:var(--panel);border:1px solid var(--rule);border-radius:6px;margin-top:26px;overflow:hidden}
+.cond .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.cond .cell{padding:16px 20px;border-left:6px solid var(--c)}
+.cond .big{font-family:var(--head);font-size:2.4rem;font-weight:700;line-height:1}
+.cond .note{border-top:1px solid var(--rule);background:var(--bg);padding:12px 20px;font-size:.93rem}
+.cond .note.warn{color:var(--warn)}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:18px}
+.panel{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:18px;min-width:0}
+.panel .sub{font-size:.85rem;color:var(--muted);margin:4px 0 12px}
+.chart-box{position:relative;height:300px}
+.panel select{border:1px solid var(--rule);background:var(--bg);border-radius:4px;padding:5px 8px;max-width:100%;margin-bottom:10px}
+
+.rank{list-style:none;margin:0;padding:0}
+.rank li{display:grid;grid-template-columns:28px 1fr 64px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--rule)}
+.rank li:last-child{border-bottom:0}
+.rank .pos{font-family:var(--head);font-size:1.5rem;font-weight:700;color:var(--muted)}
+.rank .bar{height:10px;border-radius:5px;background:var(--c);margin-top:4px}
+.rank .nm{font-weight:600}
+.rank .cov{font-size:.78rem;color:var(--muted)}
+.rank .sc{font-family:var(--head);font-size:1.6rem;font-weight:700;text-align:right}
+
+.tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.filters{display:flex;gap:6px;flex-wrap:wrap}
+.filters button{border:1px solid var(--rule);background:var(--panel);padding:5px 12px;border-radius:20px;font-size:.88rem;cursor:pointer}
+.filters button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.tools input[type=search]{border:1px solid var(--rule);background:var(--panel);border-radius:4px;padding:6px 10px;min-width:220px}
+.tools label{font-size:.88rem;display:flex;gap:6px;align-items:center}
+.table-wrap{overflow:auto;max-height:75vh;background:var(--panel);border:1px solid var(--rule);border-radius:6px}
+table{border-collapse:separate;border-spacing:0;width:100%;font-size:.9rem}
+th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--rule);vertical-align:top;min-width:150px}
+thead th{font-family:var(--head);font-size:1.05rem;font-weight:600;position:sticky;top:0;background:var(--panel);z-index:2;border-bottom:3px solid var(--c,var(--ink))}
+th.p,td.p{position:sticky;left:0;background:var(--panel);z-index:1;min-width:210px;border-right:1px solid var(--rule)}
+thead th.p{z-index:3}
+td.p small{display:block;color:var(--muted);font-size:.78rem}
+td.sec{color:var(--muted);font-size:.8rem;min-width:100px}
+td.best{background:var(--best);color:var(--best-ink);font-weight:600}
+td.gap{background:var(--gap);color:var(--muted)}
+tr.hidden{display:none}
+
+.qgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.q{background:var(--panel);border:1px solid var(--rule);border-top:4px solid var(--c);border-radius:6px;padding:14px 16px}
+.q h3{margin-bottom:8px}
+.q ul{margin:0;padding-left:18px;font-size:.9rem}
+.q li{margin-bottom:6px}
+.q li b{font-weight:600}
+footer{margin-top:40px;font-size:.8rem;color:var(--muted);border-top:1px solid var(--rule);padding-top:12px}
+.empty{padding:30px;text-align:center;color:var(--muted)}
+@media (max-width:600px){ .grid{grid-template-columns:1fr} .tools input[type=search]{min-width:0;width:100%} }
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>Chiller supplier comparison</h1>
+    <div class="src" id="src">Loading data…</div>
+  </div>
+  <div class="actions">
+    <label class="btn" for="file" tabindex="0">Upload CSV or Excel</label>
+    <input type="file" id="file" accept=".csv,.xlsx,.xls" hidden>
+    <a class="btn line" href="chiller-comparison-template.xlsx" download>Excel template</a>
+    <button class="btn line" id="dlCsv" type="button">Download current CSV</button>
+    <button class="btn line" id="reset" type="button">Reload repository data</button>
+    <button class="btn line" id="theme" type="button">Switch theme</button>
+  </div>
+</header>
+<div class="drop" id="drop">Or drop a .csv / .xlsx file anywhere on this page</div>
+<div class="msg" id="msg" role="status"></div>
+
+<div class="chips" id="chips" aria-label="Show or hide suppliers"></div>
+<section class="cond" id="cond" hidden></section>
+
+<h2>Overall ranking</h2>
+<div class="grid">
+  <div class="panel">
+    <h3>Weighted score</h3>
+    <div class="sub">Average of ranked parameters, using the Weight column. Parameters a supplier leaves blank are skipped, so check coverage.</div>
+    <ul class="rank" id="rank"></ul>
+  </div>
+  <div class="panel">
+    <h3>Relative strengths</h3>
+    <div class="sub">Rows marked Chart = yes. Each axis 0–100 against the best visible supplier; higher is always better.</div>
+    <div class="chart-box"><canvas id="radar" aria-label="Radar chart of normalised scores"></canvas></div>
+  </div>
+</div>
+
+<h2>Parameter explorer</h2>
+<div class="grid">
+  <div class="panel">
+    <label for="pick" class="muted" style="font-size:.85rem;display:block">Parameter</label>
+    <select id="pick"></select>
+    <div class="sub" id="pickNote"></div>
+    <div class="chart-box"><canvas id="bar" aria-label="Bar chart for selected parameter"></canvas></div>
+  </div>
+  <div class="panel" id="altPanel" hidden>
+    <h3>Capacity vs altitude</h3>
+    <div class="sub">From the rows keyed cooling_capacity, altitude_start and altitude_rate.</div>
+    <div class="chart-box"><canvas id="alt" aria-label="Line chart of capacity versus altitude"></canvas></div>
+  </div>
+</div>
+
+<h2>Full specification</h2>
+<div class="tools">
+  <div class="filters" id="filters" role="group" aria-label="Filter by section"></div>
+  <input type="search" id="q" placeholder="Search parameters" aria-label="Search parameters">
+  <label><input type="checkbox" id="diffOnly"> Only rows that differ</label>
+</div>
+<div class="table-wrap"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+
+<section id="qSec" hidden>
+  <h2>Open questions</h2>
+  <div class="qgrid" id="qgrid"></div>
+</section>
+
+<footer>Values are as entered in the data file and as published by suppliers; they are not independently tested. Best values are highlighted only for rows with Better = high or low.</footer>
+</div>
+
+<script>
+const SAMPLE_CSV = "Section,Parameter,Unit,Better,Weight,Chart,Key,Note,Sinobrook ETMSSAVA065015,Envicool EMW600HCNC3E,Supplier 3,Supplier 4\nInfo,Manufacturer,,none,0,no,,,Sinobrook New Energy (Shanghai),Shenzhen Envicool Technology,,\nInfo,Model,,none,0,no,,,ETMSSAVA065015,EMW600HCNC3E,,\nInfo,Source document,,none,0,no,,,\"Tech spec V1.9, 11 May 2026\",\"Datasheet, 20 Nov 2024\",,\nInfo,Compressor type,,none,0,no,,,\"Oil-free air-bearing centrifugal, up to 100000 rpm\",Variable-speed (type not stated),,\nPerformance,Cooling capacity,kW,high,2,yes,cooling_capacity,Check rating ambient row,60,60,,\nPerformance,Cooling rating ambient,\u00b0C,none,0,no,rating_ambient,Ambient at which capacity/COP are quoted,45,35,,\nPerformance,Cooling input power,kW,low,1,yes,,Quoted at each supplier's rating ambient,30,27.8,,\nPerformance,Cooling COP,-,high,3,yes,,Not like-for-like if rating ambients differ,2.0,2.16,,\nPerformance,Heating capacity,kW,high,1,no,,@ 10 \u00b0C,24,24,,\nPerformance,Heating input power,kW,low,1,yes,,,28.5,24,,\nPerformance,Pump-only (self-circulation) power,kW,low,1,no,,,,0.74,,\nPerformance,Rated flow,L/min,high,1,no,,,500,500,,\nPerformance,Available pump head at rated flow,kPa,high,2,yes,,,180,150,,\nPerformance,Refrigerant circuits,qty,high,2,no,,2 = redundancy on fault,,2,,\nElectrical,Rated voltage,V,none,0,no,,,480,480,,\nElectrical,Supply frequency,Hz,none,0,no,,,50/60,60 \u00b13,,\nElectrical,Max operating current,A,low,1,yes,,,55,54,,\nElectrical,Max power consumption,kW,low,1,no,,,,30,,\nElectrical,Communication,,none,0,no,,,RS485 Modbus RTU (CAN mentioned),RS485,,\nElectrical,Dry contacts,,none,0,no,,,Fault output NO 24 VDC; on/off knob input,Not stated,,\nEnvironment,Max working ambient,\u00b0C,high,3,yes,,,50,55,,\nEnvironment,Min working ambient,\u00b0C,low,1,no,,,-30,-30,,\nEnvironment,Max altitude,m,high,1,no,,,4000,4000,,\nEnvironment,Derating start altitude,m,high,1,no,altitude_start,,2000,1000,,\nEnvironment,Derating per 1000 m,%,low,0,no,altitude_rate,,5,5,,\nEnvironment,Refrigerant,,none,0,no,,,R513A,R32,,\nEnvironment,Refrigerant GWP,-,low,1,yes,,AR4 values,573,675,,\nEnvironment,Refrigerant safety class,,none,0,no,,A2L = mildly flammable,A1,A2L,,\nEnvironment,Noise,dB(A),low,1,no,,,80,80,,\nEnvironment,Ingress protection,,none,0,no,,,\"IPX5 unit, IP55 electrics\",IPX5 outdoor side,,\nEnvironment,Corrosion class,,none,0,no,,,C4H,,,\nMechanical,Width,mm,none,0,no,,,1200,1200,,\nMechanical,Depth,mm,none,0,no,,,440,440,,\nMechanical,Height,mm,none,0,no,,,2400,2400,,\nMechanical,Weight,kg,low,2,yes,,Envicool figure is without coolant,355,471,,\nMechanical,Coolant connection,,none,0,no,,,77.5 mm chuck,2.5in chuck ISO 2852 (77.5 mm),,\nMechanical,Condenser airflow,,none,0,no,,,\"Side in, front out\",\"Left/right/top/front in, front out\",,\nLifetime,Design life,years,high,2,no,,,10,,,\nLifetime,Compressor start/stop cycles,cycles,high,1,no,,Sinobrook text also says 500000,150000,,,\nLifetime,Fan / pump design life,h,high,1,no,,,40000,,,\nCompliance,Certifications,,none,0,no,,,ETL,\"ETL, RoHS 2.0\",,\nCommercial,Unit price,USD,low,3,yes,,Fill from quotation,,,,\nCommercial,Lead time,weeks,low,1,no,,Fill from quotation,,,,\nCommercial,Warranty,years,high,2,no,,Fill from quotation,,,,\nOpen questions,Rating conditions,,none,0,no,,,Provide capacity and power at W18/L35,Provide capacity and power at W18/L45,,\nOpen questions,Heating input,,none,0,no,,,Why is heating input 28.5 kW for 24 kW output?,,,\nOpen questions,Start/stop life,,none,0,no,,,150000 vs 500000 cycles - which is warranted?,,,\nOpen questions,Redundancy,,none,0,no,,,One or two compressors? Behaviour on compressor fault?,,,\nOpen questions,Flammable refrigerant,,none,0,no,,,,R32 charge limits and leak detection per UL 60335-2-40,,\nOpen questions,Missing lifetime data,,none,0,no,,,,\"Provide design life, fan/pump hours, corrosion class\",,\nOpen questions,50 Hz availability,,none,0,no,,,,Is a 50 Hz variant available?,,\nOpen questions,Field track record,,none,0,no,,,Field references and MTBF for centrifugal compressor,,,\n";
+const PALETTE = ["#0F8B8D","#B97A12","#4F5BD5","#C2417A","#3F8A3A","#8E44AD","#6B7B8C","#A0522D","#1F77B4","#D35400"];
+const FIXED = 8; // Section, Parameter, Unit, Better, Weight, Chart, Key, Note
+let DATA = null, visible = [], section = "All", charts = {};
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const num = v => { if (typeof v === "number") return isFinite(v) ? v : NaN;
+  const s = String(v ?? "").trim().replace(/,/g,""); return /^[-+]?\d*\.?\d+(e[-+]?\d+)?$/i.test(s) ? Number(s) : NaN; };
+const blank = v => v === null || v === undefined || String(v).trim() === "";
+const fmt = v => { const n = num(v); return isNaN(n) ? String(v) : n.toLocaleString(undefined,{maximumFractionDigits:3}); };
+function msg(t, kind){ const m = $("msg"); m.className = "msg " + kind; m.textContent = t; }
+
+/* ---------- Parse a 2D array (from CSV or Excel) ---------- */
+function build(table, label){
+  const hi = table.findIndex(r => String(r[0] ?? "").trim().toLowerCase() === "section");
+  if (hi < 0) throw new Error("Could not find the header row. Column A must be titled 'Section'.");
+  const head = table[hi].map(h => String(h ?? "").trim());
+  const need = ["section","parameter","unit","better","weight","chart","key","note"];
+  const bad = need.filter((n,i) => (head[i]||"").toLowerCase() !== n);
+  if (bad.length) throw new Error("The first 8 headers must be: Section, Parameter, Unit, Better, Weight, Chart, Key, Note. Check: " + bad.join(", "));
+  const body = table.slice(hi+1).filter(r => r.some(c => !blank(c)) && !blank(r[1]));
+  const suppliers = [];
+  for (let j = FIXED; j < head.length; j++){
+    if (!head[j]) continue;
+    if (body.some(r => !blank(r[j]))) suppliers.push({ name: head[j], col: j });
+  }
+  if (!suppliers.length) throw new Error("No supplier data found. Add values in the columns after 'Note'.");
+  suppliers.forEach((s,i) => s.color = PALETTE[i % PALETTE.length]);
+  const rows = body.map(r => ({
+    section: String(r[0] ?? "").trim() || "Other",
+    param: String(r[1]).trim(), unit: ["-","–"].includes(String(r[2] ?? "").trim()) ? "" : String(r[2] ?? "").trim(),
+    better: String(r[3] ?? "").trim().toLowerCase(),
+    weight: isNaN(num(r[4])) ? 1 : num(r[4]),
+    chart: String(r[5] ?? "").trim().toLowerCase() === "yes",
+    key: String(r[6] ?? "").trim().toLowerCase(), note: String(r[7] ?? "").trim(),
+    vals: suppliers.map(s => r[s.col])
+  }));
+  DATA = { suppliers, rows, label, head, table: [head, ...body] };
+  visible = suppliers.map(() => true);
+  section = "All";
+  renderAll();
+}
+
+function fromCSV(text, label){
+  const res = Papa.parse(text.replace(/^\uFEFF/, ""), { skipEmptyLines: true });
+  build(res.data, label);
+}
+function fromXLSX(buf, label){
+  const wb = XLSX.read(buf, { type: "array" });
+  const name = wb.SheetNames.find(n => n.toLowerCase() === "data") || wb.SheetNames[0];
+  build(XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: "", raw: true }), label + " (sheet " + name + ")");
+}
+
+/* ---------- Scoring ---------- */
+const ranked = r => (r.better === "high" || r.better === "low");
+function rowScores(r){ // returns array of score|null per supplier (visible only)
+  const v = r.vals.map((x,i) => visible[i] ? num(x) : NaN);
+  const ok = v.filter(x => !isNaN(x));
+  if (!ranked(r) || ok.length < 2) return v.map(() => null);
+  const mx = Math.max(...ok), mn = Math.min(...ok);
+  const pos = mn > 0;
+  return v.map(x => {
+    if (isNaN(x)) return null;
+    if (mx === mn) return 100;
+    if (pos) return r.better === "high" ? x/mx*100 : mn/x*100;
+    return r.better === "high" ? (x-mn)/(mx-mn)*100 : (mx-x)/(mx-mn)*100;
+  });
+}
+function bestIdx(r){
+  if (!ranked(r)) return [];
+  const v = r.vals.map((x,i) => visible[i] ? num(x) : NaN);
+  const ok = v.filter(x => !isNaN(x)); if (ok.length < 2) return [];
+  const t = r.better === "high" ? Math.max(...ok) : Math.min(...ok);
+  if (ok.every(x => x === t)) return [];
+  return v.map((x,i) => x === t ? i : -1).filter(i => i >= 0);
+}
+
+/* ---------- Render ---------- */
+function renderAll(){
+  $("src").textContent = `${DATA.label} · ${DATA.suppliers.length} suppliers · ${DATA.rows.length} parameters`;
+  renderChips(); renderRest();
+}
+function renderRest(){ renderCond(); renderRank(); renderPick(); renderTable(); renderQuestions(); drawCharts(); }
+
+function renderChips(){
+  $("chips").innerHTML = DATA.suppliers.map((s,i) =>
+    `<label class="chip ${visible[i]?"":"off"}" style="--c:${s.color}"><input type="checkbox" data-i="${i}" ${visible[i]?"checked":""}><span class="sw"></span>${esc(s.name)}</label>`).join("");
+  $("chips").querySelectorAll("input").forEach(cb => cb.onchange = () => {
+    const i = +cb.dataset.i;
+    if (!cb.checked && visible.filter(Boolean).length === 1){ cb.checked = true; return; }
+    visible[i] = cb.checked; cb.parentElement.classList.toggle("off", !cb.checked); renderRest();
+  });
+}
+
+function renderCond(){
+  const r = DATA.rows.find(x => x.key === "rating_ambient"), el = $("cond");
+  if (!r){ el.hidden = true; return; }
+  const items = DATA.suppliers.map((s,i) => ({s, v: r.vals[i], i})).filter(o => visible[o.i]);
+  const nums = items.map(o => num(o.v)).filter(x => !isNaN(x));
+  const differ = new Set(nums).size > 1 || nums.length < items.length;
+  el.hidden = false;
+  el.innerHTML = `<div class="row">${items.map(o => `<div class="cell" style="--c:${o.s.color}">
+      <div class="muted">${esc(o.s.name)} rated at</div>
+      <div class="big">${blank(o.v) ? "Not stated" : esc(fmt(o.v)) + " " + esc(r.unit)}</div></div>`).join("")}</div>
+    <div class="note ${differ?"warn":""}">${differ
+      ? "Capacity and efficiency are quoted at different (or unknown) ambient temperatures, so COP and input power are not like-for-like. Ask every supplier for data at the same rating points."
+      : "All visible suppliers quote performance at the same ambient, so capacity and COP compare directly."}</div>`;
+}
+
+function renderRank(){
+  const tot = DATA.suppliers.map(() => ({ws:0, w:0, n:0}));
+  const rr = DATA.rows.filter(r => ranked(r) && r.weight > 0);
+  rr.forEach(r => rowScores(r).forEach((s,i) => { if (s !== null){ tot[i].ws += s*r.weight; tot[i].w += r.weight; } }));
+  const hasAny = rr.filter(r => r.vals.some((v,i) => visible[i] && !isNaN(num(v))));
+  hasAny.forEach(r => r.vals.forEach((v,i) => { if (!isNaN(num(v))) tot[i].n++; }));
+  const eligible = hasAny.length;
+  const list = DATA.suppliers.map((s,i) => ({s, i, score: tot[i].w ? tot[i].ws/tot[i].w : null, cov: eligible ? tot[i].n/eligible : 0}))
+    .filter(o => visible[o.i]).sort((a,b) => (b.score ?? -1) - (a.score ?? -1));
+  $("rank").innerHTML = list.map((o,k) => `<li style="--c:${o.s.color}">
+      <span class="pos">${k+1}</span>
+      <div><div class="nm">${esc(o.s.name)}</div><div class="bar" style="width:${o.score ?? 0}%"></div>
+      <div class="cov">Data for ${tot[o.i].n} of ${eligible} ranked parameters (${Math.round(o.cov*100)} %)</div></div>
+      <span class="sc">${o.score === null ? "–" : o.score.toFixed(0)}</span></li>`).join("")
+    || `<li class="empty">No ranked parameters with values from two or more suppliers yet.</li>`;
+}
+
+function numericRows(){ return DATA.rows.filter(r => r.vals.some((v,i) => visible[i] && !isNaN(num(v)))); }
+function renderPick(){
+  const sel = $("pick"), prev = sel.value, rows = numericRows();
+  sel.innerHTML = rows.map(r => { const k = DATA.rows.indexOf(r);
+    return `<option value="${k}">${esc(r.section)} – ${esc(r.param)}${r.unit ? " (" + esc(r.unit) + ")" : ""}</option>`; }).join("");
+  const def = rows.find(r => r.chart) || rows[0];
+  sel.value = rows.some(r => String(DATA.rows.indexOf(r)) === prev) ? prev : (def ? DATA.rows.indexOf(def) : "");
+  sel.onchange = drawBar;
+}
+
+function renderTable(){
+  const vs = DATA.suppliers.map((s,i) => ({s,i})).filter(o => visible[o.i]);
+  $("thead").innerHTML = `<tr><th class="p">Parameter</th>${vs.map(o => `<th style="--c:${o.s.color}">${esc(o.s.name)}</th>`).join("")}<th>Section</th></tr>`;
+  const secs = ["All", ...new Set(DATA.rows.filter(r => r.section !== "Open questions").map(r => r.section))];
+  if (!secs.includes(section)) section = "All";
+  $("filters").innerHTML = secs.map(s => `<button type="button" aria-pressed="${s===section}">${esc(s)}</button>`).join("");
+  $("filters").querySelectorAll("button").forEach(b => b.onclick = () => { section = b.textContent; renderTable(); });
+  $("tbody").innerHTML = DATA.rows.filter(r => r.section !== "Open questions").map(r => {
+    const best = bestIdx(r);
+    const meta = [r.unit && `Unit: ${esc(r.unit)}`, ranked(r) && `${r.better === "high" ? "Higher" : "Lower"} is better`, r.note && esc(r.note)].filter(Boolean).join(" · ");
+    const shown = vs.map(o => String(r.vals[o.i] ?? "").trim());
+    const differ = new Set(shown).size > 1;
+    return `<tr data-sec="${esc(r.section)}" data-diff="${differ}" data-txt="${esc((r.param+" "+r.note).toLowerCase())}">
+      <td class="p"><strong>${esc(r.param)}</strong>${meta ? `<small>${meta}</small>` : ""}</td>
+      ${vs.map(o => { const v = r.vals[o.i];
+        if (blank(v)) return `<td class="gap">Not stated</td>`;
+        return `<td class="${best.includes(o.i) ? "best" : ""}">${esc(fmt(v))}${!isNaN(num(v)) && r.unit ? " " + esc(r.unit) : ""}</td>`; }).join("")}
+      <td class="sec">${esc(r.section)}</td></tr>`;
+  }).join("");
+  filterRows();
+}
+function filterRows(){
+  const q = $("q").value.trim().toLowerCase(), d = $("diffOnly").checked;
+  $("tbody").querySelectorAll("tr").forEach(tr => {
+    const show = (section === "All" || tr.dataset.sec === section) && (!q || tr.dataset.txt.includes(q)) && (!d || tr.dataset.diff === "true");
+    tr.classList.toggle("hidden", !show);
+  });
+}
+$("q").oninput = filterRows; $("diffOnly").onchange = filterRows;
+
+function renderQuestions(){
+  const qs = DATA.rows.filter(r => r.section.toLowerCase() === "open questions");
+  const cards = DATA.suppliers.map((s,i) => ({s, i, items: qs.filter(r => !blank(r.vals[i]))})).filter(o => visible[o.i] && o.items.length);
+  $("qSec").hidden = !cards.length;
+  $("qgrid").innerHTML = cards.map(o => `<div class="q" style="--c:${o.s.color}"><h3>${esc(o.s.name)}</h3><ul>
+    ${o.items.map(r => `<li><b>${esc(r.param)}:</b> ${esc(r.vals[o.i])}</li>`).join("")}</ul></div>`).join("");
+}
+
+/* ---------- Charts ---------- */
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function kill(k){ if (charts[k]){ charts[k].destroy(); delete charts[k]; } }
+function base(){ Chart.defaults.font.family = css("--body"); Chart.defaults.color = css("--muted"); Chart.defaults.borderColor = css("--rule"); }
+function drawCharts(){ base(); drawRadar(); drawBar(); drawAlt(); }
+
+function drawRadar(){
+  kill("radar");
+  const rows = DATA.rows.filter(r => r.chart && ranked(r) && rowScores(r).filter(s => s !== null).length >= 2);
+  const vs = DATA.suppliers.map((s,i) => ({s,i})).filter(o => visible[o.i]);
+  if (!rows.length) return;
+  const sc = rows.map(rowScores);
+  charts.radar = new Chart($("radar"), { type: "radar",
+    data: { labels: rows.map(r => r.param), datasets: vs.map(o => ({ label: o.s.name,
+      data: sc.map(s => s[o.i] === null ? null : Math.round(s[o.i])), borderColor: o.s.color, backgroundColor: o.s.color + "22",
+      pointBackgroundColor: o.s.color, spanGaps: true })) },
+    options: { maintainAspectRatio: false, plugins: { legend: { position: "bottom" } },
+      scales: { r: { min: 0, max: 100, ticks: { display: false }, grid: { color: css("--rule") }, angleLines: { color: css("--rule") }, pointLabels: { color: css("--ink") } } } } });
+}
+
+function drawBar(){
+  kill("bar");
+  const r = DATA.rows[+$("pick").value]; if (!r) { $("pickNote").textContent = "No numeric parameters yet."; return; }
+  const vs = DATA.suppliers.map((s,i) => ({s,i})).filter(o => visible[o.i]);
+  const best = bestIdx(r);
+  $("pickNote").textContent = [ranked(r) ? (r.better === "high" ? "Higher is better." : "Lower is better.") : "Not ranked.",
+    vs.some(o => isNaN(num(r.vals[o.i]))) ? "Missing bars = not stated." : "", r.note].filter(Boolean).join(" ");
+  charts.bar = new Chart($("bar"), { type: "bar",
+    data: { labels: vs.map(o => o.s.name), datasets: [{ label: r.param + (r.unit ? " (" + r.unit + ")" : ""),
+      data: vs.map(o => { const n = num(r.vals[o.i]); return isNaN(n) ? null : n; }),
+      backgroundColor: vs.map(o => o.s.color), borderColor: vs.map(o => best.includes(o.i) ? css("--ink") : o.s.color), borderWidth: vs.map(o => best.includes(o.i) ? 3 : 0) }] },
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: vs.every(o => isNaN(num(r.vals[o.i])) || num(r.vals[o.i]) >= 0), title: { display: !!r.unit, text: r.unit } } } } });
+}
+
+function drawAlt(){
+  kill("alt");
+  const g = k => DATA.rows.find(r => r.key === k);
+  const cap = g("cooling_capacity"), st = g("altitude_start"), rt = g("altitude_rate");
+  const vs = DATA.suppliers.map((s,i) => ({s,i})).filter(o => visible[o.i] && cap && st && rt &&
+    ![cap,st,rt].some(r => isNaN(num(r.vals[o.i]))));
+  $("altPanel").hidden = !vs.length; if (!vs.length) return;
+  const alts = [0,500,1000,1500,2000,2500,3000,3500,4000];
+  charts.alt = new Chart($("alt"), { type: "line",
+    data: { labels: alts.map(a => a + " m"), datasets: vs.map(o => { const c = num(cap.vals[o.i]), s = num(st.vals[o.i]), p = num(rt.vals[o.i]);
+      return { label: o.s.name, borderColor: o.s.color, backgroundColor: o.s.color, tension: 0,
+        data: alts.map(a => +(c * (a <= s ? 1 : 1 - p/100*(a-s)/1000)).toFixed(2)) }; }) },
+    options: { maintainAspectRatio: false, plugins: { legend: { position: "bottom" } },
+      scales: { y: { title: { display: true, text: cap.unit || "Capacity" } } } } });
+}
+
+/* ---------- Loading ---------- */
+function loadFile(f){
+  if (!f) return;
+  const ext = f.name.split(".").pop().toLowerCase(), rd = new FileReader();
+  rd.onerror = () => msg("Could not read " + f.name + ".", "err");
+  rd.onload = e => { try {
+      if (ext === "csv") fromCSV(e.target.result, "Uploaded: " + f.name); else fromXLSX(new Uint8Array(e.target.result), "Uploaded: " + f.name);
+      msg("Loaded " + f.name + ". Uploaded data stays in this browser tab only; replace data.csv in the repository to share it.", "ok");
+    } catch(err){ msg(err.message, "err"); } };
+  if (ext === "csv") rd.readAsText(f); else if (["xlsx","xls"].includes(ext)) rd.readAsArrayBuffer(f);
+  else msg("Use a .csv, .xlsx or .xls file.", "err");
+}
+$("file").onchange = e => { loadFile(e.target.files[0]); e.target.value = ""; };
+document.querySelector("label[for=file]").onkeydown = e => { if (e.key === "Enter" || e.key === " "){ e.preventDefault(); $("file").click(); } };
+const drop = $("drop");
+["dragenter","dragover"].forEach(t => document.addEventListener(t, e => { e.preventDefault(); drop.classList.add("on"); }));
+["dragleave","drop"].forEach(t => document.addEventListener(t, e => { e.preventDefault(); if (t === "drop" || !e.relatedTarget) drop.classList.remove("on"); }));
+document.addEventListener("drop", e => loadFile(e.dataTransfer.files[0]));
+
+async function loadRepo(){
+  try {
+    const r = await fetch("data.csv", { cache: "no-store" });
+    if (!r.ok) throw new Error();
+    fromCSV(await r.text(), "data.csv from repository");
+    $("msg").className = "msg";
+  } catch(e){
+    fromCSV(SAMPLE_CSV, "Built-in sample (data.csv not found)");
+  }
+}
+$("reset").onclick = loadRepo;
+$("dlCsv").onclick = () => {
+  const blob = new Blob(["\uFEFF" + Papa.unparse(DATA.table)], { type: "text/csv" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "data.csv"; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+
+/* ---------- Theme ---------- */
+const root = document.documentElement;
+try { const t = localStorage.getItem("chiller-theme"); if (t) root.dataset.theme = t; } catch(e){}
+$("theme").onclick = () => {
+  const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme = dark ? "light" : "dark";
+  try { localStorage.setItem("chiller-theme", root.dataset.theme); } catch(e){}
+  if (DATA) drawCharts();
+};
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (!root.dataset.theme && DATA) drawCharts(); });
+
+loadRepo();
+</script>
+</body>
+</html>
